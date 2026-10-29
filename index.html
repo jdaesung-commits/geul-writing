@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17191c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="글">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" href="./icon-180.png">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<meta charset="utf-8">
+<title>글</title>
+<style>
+/* Layout: full-screen dark writing pad; slim header with version + clear button, textarea fills the rest */
+:root{
+  color-scheme:dark;
+  --bg:#17191c;
+  --bar:#1e2125;
+  --line:#30343a;
+  --muted:#aeb5bf;
+  --fg:#e5e7eb;
+  --caret:#f3f4f6;
+  --btn:#2a2e33;
+  --btn-active:#3a4047;
+  --btn-line:#434951;
+  --focus:#7aa2d0;
+  --select:#35567a;
+  --edge:#41464e;
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  background:var(--bg);
+  color:var(--fg);
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden}
+body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);background:var(--bg);color:var(--fg)}
+header{
+  display:flex;align-items:center;min-height:52px;flex-shrink:0;
+  padding:4px max(18px,env(safe-area-inset-right,0px)) 4px max(18px,env(safe-area-inset-left,0px));
+  background:var(--bar);border-bottom:1px solid var(--line);color:var(--muted);font-size:14px;
+}
+.mark{width:28px;height:28px;border-radius:7px;margin-right:10px;flex-shrink:0}
+.header-actions{margin-left:auto;display:flex;align-items:center;gap:12px}
+button{
+  min-width:56px;min-height:44px;padding:0 16px;border:1px solid var(--btn-line);border-radius:8px;
+  background:var(--btn);color:var(--fg);font:inherit;font-size:15px;font-weight:600;
+  -webkit-tap-highlight-color:transparent;
+}
+button:active{background:var(--btn-active)}
+button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+textarea{
+  display:block;flex:1;min-height:0;width:100%;resize:none;border:0;outline:0;border-radius:0;
+  background:var(--bg);color:var(--fg);caret-color:var(--caret);
+  font-family:inherit;font-size:20px;line-height:1.4;tab-size:4;-webkit-appearance:none;
+  padding:20px max(22px,env(safe-area-inset-right,0px)) max(22px,env(safe-area-inset-bottom,0px)) max(22px,env(safe-area-inset-left,0px));
+}
+textarea::selection{background:var(--select)}
+textarea:focus-visible{box-shadow:inset 0 0 0 1px var(--edge)}
+</style>
+
+<header>
+  <img class="mark" src="icon-180.png" alt="" width="28" height="28"><span>v13</span>
+  <div class="header-actions">
+    <button id="exit" type="button" aria-label="작성 내용 전체 삭제">전체 삭제</button>
+  </div>
+</header>
+<textarea id="editor" aria-label="글 작성" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+
+<script>
+'use strict';
+let editor=document.getElementById('editor');
+const exit=document.getElementById('exit');
+let fontSize=20;
+function timestamp(date=new Date()){
+  const pad=n=>String(n).padStart(2,'0');
+  return `${date.getHours()<12?'오전':'오후'} ${date.getHours()%12||12}:${pad(date.getMinutes())} ${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
+}
+function insertTimestamp(){editor.setRangeText(timestamp(),editor.selectionStart,editor.selectionEnd,'end');save();editor.focus({preventScroll:true});}
+const KEY='writing-draft';
+function load(){try{return localStorage.getItem(KEY)||'';}catch(e){return '';}}
+function save(){try{if(editor.value)localStorage.setItem(KEY,editor.value);else localStorage.removeItem(KEY);}catch(e){}}
+function wipe(){try{localStorage.setItem(KEY,'');localStorage.removeItem(KEY);}catch(e){}}
+function bind(){editor.addEventListener('input',save);}
+editor.value=load();
+bind();
+window.addEventListener('pagehide',save);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)save();});
+// Clear: remove the stored copy and replace the textarea so its undo history is gone too.
+exit.addEventListener('click',()=>{
+  wipe();
+  const fresh=editor.cloneNode(false);
+  fresh.value='';
+  editor.replaceWith(fresh);
+  editor=fresh;
+  bind();
+  wipe();
+  editor.focus({preventScroll:true});
+});
+document.addEventListener('keydown',event=>{
+  if(event.isComposing)return;
+  // F5 or Ctrl+0 inserts the current time
+  if(event.key==='F5'&&!event.ctrlKey&&!event.metaKey&&!event.altKey){event.preventDefault();insertTimestamp();return;}
+  if(event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.shiftKey&&(event.key==='0'||event.code==='Digit0'||event.code==='Numpad0')){event.preventDefault();insertTimestamp();return;}
+  if(event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.shiftKey&&event.key.toLowerCase()==='z'){
+    const handled=typeof document.execCommand==='function'&&document.execCommand('undo');
+    if(handled)event.preventDefault();
+    return;
+  }
+  // Ctrl/Cmd +/- changes font size
+  if((event.ctrlKey||event.metaKey)&&['+','=','-','Subtract','Add'].includes(event.key)){
+    event.preventDefault();
+    fontSize=Math.max(12,Math.min(48,fontSize+(['-','Subtract'].includes(event.key)?-2:2)));
+    editor.style.fontSize=fontSize+'px';
+  }
+});
+// The draft is autosaved in this browser's local storage and restored on load.
+if(window.visualViewport){const resize=()=>{document.body.style.height=window.visualViewport.height+'px';};window.visualViewport.addEventListener('resize',resize);resize();}
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js').catch(()=>{});});}
+</script>
+</html>
